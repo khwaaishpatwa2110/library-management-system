@@ -1,0 +1,1556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARCANA — Library Management System</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Crimson+Pro:ital,wght@0,300;0,400;0,500;1,300;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:        #f5efe6;
+  --bg2:       #ede4d6;
+  --surface:   #faf6f0;
+  --surface2:  #f0e8da;
+  --border:    #d4c4a8;
+  --border2:   #c2ae8a;
+  --mahogany:  #5c2d0e;
+  --brown:     #7a4020;
+  --amber:     #c17f3a;
+  --amber2:    #e8a84a;
+  --sage:      #4a6741;
+  --ink:       #1a1208;
+  --ink2:      #3d2b12;
+  --muted:     #8a7560;
+  --muted2:    #b09878;
+  --cream:     #fdfaf5;
+  --red:       #9e2a2b;
+  --teal:      #2a6b6b;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  font-family: 'Crimson Pro', Georgia, serif;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Paper texture overlay */
+body::before {
+  content:'';
+  position:fixed;
+  inset:0;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  pointer-events:none;
+  z-index:1000;
+}
+
+/* ── LOADING ─────────────────────────────── */
+#loading {
+  position:fixed; inset:0;
+  background:var(--mahogany);
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  gap:20px; z-index:9999;
+}
+#loading .brand { font-family:'Playfair Display',serif; font-size:52px; color:#f5efe6; letter-spacing:8px; }
+#loading .sub   { font-family:'Crimson Pro',serif; font-size:16px; color:#c2ae8a; letter-spacing:4px; font-style:italic; }
+.spine-loader {
+  display:flex; gap:6px; align-items:flex-end; height:40px;
+}
+.spine-bar {
+  width:6px; background:#c2ae8a; border-radius:2px;
+  animation: spineWave 1.2s ease-in-out infinite;
+}
+.spine-bar:nth-child(2) { animation-delay:.15s; }
+.spine-bar:nth-child(3) { animation-delay:.3s; }
+.spine-bar:nth-child(4) { animation-delay:.45s; }
+.spine-bar:nth-child(5) { animation-delay:.6s; }
+@keyframes spineWave {
+  0%,100% { height:12px; opacity:.4; }
+  50%      { height:36px; opacity:1; }
+}
+
+/* ── HEADER ──────────────────────────────── */
+header {
+  background: var(--mahogany);
+  padding: 0 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 70px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 20px rgba(92,45,14,0.3);
+}
+header::after {
+  content:'';
+  position:absolute; bottom:-3px; left:0; right:0;
+  height:3px;
+  background: linear-gradient(90deg, var(--amber), var(--amber2), var(--amber));
+}
+.brand {
+  display:flex; align-items:baseline; gap:12px;
+}
+.brand-main {
+  font-family:'Playfair Display',serif;
+  font-size:28px; letter-spacing:6px;
+  color:#f5efe6; font-weight:700;
+}
+.brand-sub {
+  font-family:'Crimson Pro',serif;
+  font-size:13px; letter-spacing:2px;
+  color:var(--muted2); font-style:italic;
+}
+.db-pill {
+  display:flex; align-items:center; gap:8px;
+  background:rgba(255,255,255,0.08);
+  border:1px solid rgba(194,174,138,0.3);
+  border-radius:20px; padding:6px 14px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px; color:var(--muted2);
+}
+.db-dot { width:7px; height:7px; border-radius:50%; background:#555; transition:.3s; }
+.db-dot.on { background:#6dbf6d; box-shadow:0 0 8px #6dbf6d; }
+
+/* ── LAYOUT ──────────────────────────────── */
+.app { display:grid; grid-template-columns:230px 1fr; min-height:calc(100vh - 70px); }
+
+/* ── SIDEBAR ─────────────────────────────── */
+nav {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 28px 0;
+  position: sticky; top:70px;
+  height: calc(100vh - 70px);
+  overflow-y: auto;
+}
+.nav-section { padding:0 16px; margin-bottom:28px; }
+.nav-label {
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px; letter-spacing:3px; text-transform:uppercase;
+  color:var(--muted2); margin-bottom:8px; padding-left:12px;
+}
+.nav-item {
+  display:flex; align-items:center; gap:10px;
+  padding:9px 12px; border-radius:6px;
+  cursor:pointer; font-size:15px;
+  color:var(--muted); transition:all .2s;
+  border:1px solid transparent;
+  margin-bottom:2px; user-select:none;
+  font-family:'Crimson Pro',serif;
+}
+.nav-item:hover { background:var(--bg2); color:var(--ink2); border-color:var(--border); }
+.nav-item.active {
+  background:var(--mahogany); color:#f5efe6;
+  border-color:var(--mahogany);
+}
+.nav-icon { font-size:15px; width:18px; text-align:center; }
+
+/* ── MAIN ────────────────────────────────── */
+main { padding:36px 40px; overflow-y:auto; background:var(--bg); }
+.page { display:none; }
+.page.active { display:block; }
+
+/* ── PAGE HEADER ─────────────────────────── */
+.page-header {
+  display:flex; align-items:flex-start;
+  justify-content:space-between; margin-bottom:30px;
+  padding-bottom:20px;
+  border-bottom:2px solid var(--border);
+}
+.page-title {
+  font-family:'Playfair Display',serif;
+  font-size:38px; letter-spacing:1px;
+  color:var(--mahogany); line-height:1;
+}
+.page-subtitle {
+  font-family:'Crimson Pro',serif;
+  font-size:15px; color:var(--muted);
+  margin-top:6px; font-style:italic;
+}
+
+/* ── STATS ───────────────────────────────── */
+.stats-row {
+  display:grid; grid-template-columns:repeat(4,1fr);
+  gap:16px; margin-bottom:28px;
+}
+.stat-card {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:10px; padding:20px;
+  position:relative; overflow:hidden;
+}
+.stat-card::before {
+  content:''; position:absolute;
+  top:0; left:0; right:0; height:3px;
+}
+.stat-card.s1::before { background:var(--mahogany); }
+.stat-card.s2::before { background:var(--amber); }
+.stat-card.s3::before { background:var(--sage); }
+.stat-card.s4::before { background:var(--teal); }
+.stat-card::after {
+  content:attr(data-icon);
+  position:absolute; bottom:-6px; right:10px;
+  font-size:52px; opacity:.06;
+  font-family:'Playfair Display',serif;
+}
+.stat-label {
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px; letter-spacing:2px;
+  text-transform:uppercase; color:var(--muted);
+  margin-bottom:8px;
+}
+.stat-value {
+  font-family:'Playfair Display',serif;
+  font-size:38px; line-height:1;
+}
+.stat-card.s1 .stat-value { color:var(--mahogany); }
+.stat-card.s2 .stat-value { color:var(--amber); }
+.stat-card.s3 .stat-value { color:var(--sage); }
+.stat-card.s4 .stat-value { color:var(--teal); }
+
+/* ── SECTION ─────────────────────────────── */
+.section {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:10px; overflow:hidden;
+  margin-bottom:22px;
+}
+.section-header {
+  display:flex; align-items:center;
+  justify-content:space-between;
+  padding:16px 22px;
+  border-bottom:1px solid var(--border);
+  background:var(--surface2);
+}
+.section-title {
+  font-family:'Playfair Display',serif;
+  font-size:16px; color:var(--mahogany);
+  font-weight:600;
+}
+
+/* ── TABLES ──────────────────────────────── */
+.table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:14px; }
+thead th {
+  padding:11px 18px; text-align:left;
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px; letter-spacing:2px; text-transform:uppercase;
+  color:var(--muted2); background:var(--bg2);
+  font-weight:500; white-space:nowrap;
+}
+tbody tr { border-top:1px solid var(--border); transition:background .15s; }
+tbody tr:hover { background:var(--bg2); }
+td { padding:12px 18px; color:var(--ink2); vertical-align:middle; font-size:14.5px; }
+td:first-child {
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px; color:var(--muted);
+}
+
+/* ── BADGES ──────────────────────────────── */
+.badge {
+  display:inline-block; padding:3px 10px;
+  border-radius:20px; font-size:12px;
+  font-family:'Crimson Pro',serif; letter-spacing:.3px;
+}
+.badge-brown  { background:rgba(92,45,14,.1);  color:var(--mahogany); border:1px solid rgba(92,45,14,.2); }
+.badge-amber  { background:rgba(193,127,58,.12); color:var(--brown);   border:1px solid rgba(193,127,58,.25); }
+.badge-sage   { background:rgba(74,103,65,.1);  color:var(--sage);    border:1px solid rgba(74,103,65,.2); }
+.badge-teal   { background:rgba(42,107,107,.1); color:var(--teal);    border:1px solid rgba(42,107,107,.2); }
+.badge-red    { background:rgba(158,42,43,.1);  color:var(--red);     border:1px solid rgba(158,42,43,.2); }
+.badge-gray   { background:rgba(0,0,0,.05);     color:var(--muted);   border:1px solid var(--border); }
+
+/* ── FORMS ───────────────────────────────── */
+.form-grid {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+  gap:16px; padding:22px;
+}
+.form-group { display:flex; flex-direction:column; gap:5px; }
+.form-group.full { grid-column:1/-1; }
+label {
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px; letter-spacing:2px;
+  text-transform:uppercase; color:var(--muted);
+}
+input, select, textarea {
+  background:var(--cream);
+  border:1px solid var(--border);
+  border-radius:6px; padding:9px 13px;
+  color:var(--ink); font-family:'Crimson Pro',serif;
+  font-size:15px; outline:none;
+  transition:border-color .2s, box-shadow .2s;
+}
+input:focus, select:focus, textarea:focus {
+  border-color:var(--amber);
+  box-shadow:0 0 0 3px rgba(193,127,58,.12);
+}
+select option { background:var(--cream); }
+.form-actions { padding:0 22px 22px; display:flex; gap:10px; }
+
+/* ── BUTTONS ─────────────────────────────── */
+.btn {
+  display:inline-flex; align-items:center; gap:7px;
+  padding:9px 18px; border-radius:6px; border:none;
+  cursor:pointer; font-family:'Crimson Pro',serif;
+  font-size:15px; font-weight:500; transition:all .2s;
+  white-space:nowrap; letter-spacing:.2px;
+}
+.btn-primary { background:var(--mahogany); color:#f5efe6; }
+.btn-primary:hover { background:var(--brown); transform:translateY(-1px); box-shadow:0 4px 16px rgba(92,45,14,.35); }
+.btn-secondary { background:var(--surface2); color:var(--muted); border:1px solid var(--border); }
+.btn-secondary:hover { border-color:var(--border2); color:var(--ink2); }
+.btn-sage { background:rgba(74,103,65,.12); color:var(--sage); border:1px solid rgba(74,103,65,.25); }
+.btn-sage:hover { background:rgba(74,103,65,.22); }
+.btn-red  { background:rgba(158,42,43,.1);  color:var(--red);  border:1px solid rgba(158,42,43,.2); }
+.btn-red:hover  { background:rgba(158,42,43,.2); }
+.btn-teal { background:rgba(42,107,107,.1); color:var(--teal); border:1px solid rgba(42,107,107,.2); }
+.btn-teal:hover { background:rgba(42,107,107,.2); }
+.btn-sm { padding:5px 11px; font-size:13px; }
+
+/* ── TOAST ───────────────────────────────── */
+.toast-container { position:fixed; bottom:28px; right:28px; z-index:9999; display:flex; flex-direction:column; gap:8px; }
+.toast {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:8px; padding:12px 18px; font-size:14px;
+  color:var(--ink2); display:flex; align-items:center;
+  gap:10px; animation:slideIn .3s ease;
+  box-shadow:0 6px 24px rgba(92,45,14,.15); max-width:300px;
+  font-family:'Crimson Pro',serif;
+}
+.toast.success { border-left:3px solid var(--sage); }
+.toast.error   { border-left:3px solid var(--red); }
+@keyframes slideIn { from{transform:translateX(110%);opacity:0} to{transform:translateX(0);opacity:1} }
+
+/* ── SQL TERMINAL ────────────────────────── */
+.sql-terminal {
+  background:var(--mahogany); border-radius:10px;
+  overflow:hidden; margin-bottom:20px;
+}
+.term-header {
+  display:flex; align-items:center; gap:8px;
+  padding:11px 16px; background:rgba(0,0,0,.25);
+  border-bottom:1px solid rgba(255,255,255,.08);
+}
+.tdot { width:10px; height:10px; border-radius:50%; }
+.tdot.r{background:#ff5f57;} .tdot.y{background:#febc2e;} .tdot.g{background:#28c840;}
+.term-title { font-family:'JetBrains Mono',monospace; font-size:11px; color:rgba(255,255,255,.4); margin-left:6px; }
+.term-body { padding:16px; }
+.sql-input {
+  width:100%; min-height:90px;
+  background:transparent; border:none;
+  color:#f0d9b5; font-family:'JetBrains Mono',monospace;
+  font-size:13px; resize:vertical; outline:none; line-height:1.7;
+}
+.sql-input::placeholder { color:rgba(240,217,181,.3); }
+.term-actions {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 16px; border-top:1px solid rgba(255,255,255,.08);
+}
+.sql-result {
+  background:var(--cream); border:1px solid var(--border);
+  border-radius:10px; overflow:hidden; max-height:280px; overflow-y:auto;
+}
+.sql-result-hdr {
+  padding:9px 16px; background:var(--surface2);
+  border-bottom:1px solid var(--border);
+  font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted);
+}
+.sql-output {
+  padding:14px 16px;
+  font-family:'JetBrains Mono',monospace; font-size:12px;
+  color:var(--ink2); white-space:pre-wrap; line-height:1.7; min-height:50px;
+}
+.sql-error   { color:var(--red); }
+.sql-success { color:var(--sage); }
+
+/* ── DASHBOARD GRID ──────────────────────── */
+.dash-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:20px; }
+.activity-item { display:flex; align-items:flex-start; gap:14px; padding:13px 20px; border-top:1px solid var(--border); }
+.a-icon { width:34px; height:34px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0; }
+.a-icon.brown { background:rgba(92,45,14,.1); }
+.a-icon.amber { background:rgba(193,127,58,.12); }
+.a-icon.sage  { background:rgba(74,103,65,.1); }
+.a-icon.teal  { background:rgba(42,107,107,.1); }
+.a-text  { font-size:14.5px; color:var(--ink2); line-height:1.4; }
+.a-meta  { font-size:12px; color:var(--muted); margin-top:3px; font-style:italic; }
+.action-group { display:flex; gap:6px; }
+
+/* ── OVERDUE HIGHLIGHT ───────────────────── */
+.overdue-row { background:rgba(158,42,43,.04) !important; }
+.overdue-row:hover { background:rgba(158,42,43,.08) !important; }
+
+/* ── EMPTY ───────────────────────────────── */
+.empty { text-align:center; padding:44px; color:var(--muted); font-style:italic; font-size:15px; }
+.empty-icon { font-size:30px; margin-bottom:10px; opacity:.4; }
+
+/* ── SCROLLBAR ───────────────────────────── */
+::-webkit-scrollbar { width:4px; height:4px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px; }
+
+/* ── SCHEMA BOX ──────────────────────────── */
+.schema-box {
+  background:var(--mahogany); border-radius:10px;
+  padding:28px; font-family:'JetBrains Mono',monospace;
+  font-size:12px; color:#f0d9b5; line-height:2;
+  white-space:pre; overflow-x:auto;
+}
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="brand">ARCANA</div>
+  <div class="sub">Library Management System</div>
+  <div class="spine-loader">
+    <div class="spine-bar"></div><div class="spine-bar"></div>
+    <div class="spine-bar"></div><div class="spine-bar"></div>
+    <div class="spine-bar"></div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+
+<header>
+  <div class="brand">
+    <div class="brand-main">ARCANA</div>
+    <div class="brand-sub">Library Management System</div>
+  </div>
+  <div class="db-pill">
+    <div class="db-dot" id="dbDot"></div>
+    <span id="dbStatus">Connecting…</span>
+  </div>
+</header>
+
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <nav>
+    <div class="nav-section">
+      <div class="nav-label">Overview</div>
+      <div class="nav-item active" onclick="nav('dashboard',this)"><span class="nav-icon">◈</span> Dashboard</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Catalogue</div>
+      <div class="nav-item" onclick="nav('books',this)"><span class="nav-icon">📚</span> Books</div>
+      <div class="nav-item" onclick="nav('authors',this)"><span class="nav-icon">✒</span> Authors</div>
+      <div class="nav-item" onclick="nav('genres',this)"><span class="nav-icon">◎</span> Genres</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Members</div>
+      <div class="nav-item" onclick="nav('members',this)"><span class="nav-icon">◉</span> Members</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Circulation</div>
+      <div class="nav-item" onclick="nav('borrow',this)"><span class="nav-icon">↗</span> Borrow Book</div>
+      <div class="nav-item" onclick="nav('returns',this)"><span class="nav-icon">↙</span> Returns</div>
+      <div class="nav-item" onclick="nav('overdue',this)"><span class="nav-icon">⚠</span> Overdue</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">System</div>
+      <div class="nav-item" onclick="nav('sql',this)"><span class="nav-icon">⌥</span> SQL Terminal</div>
+      <div class="nav-item" onclick="nav('schema',this)"><span class="nav-icon">∷</span> DB Schema</div>
+    </div>
+  </nav>
+
+  <main>
+
+    <!-- ══ DASHBOARD ════════════════════════════ -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Dashboard</div>
+          <div class="page-subtitle">Library at a glance</div>
+        </div>
+        <button class="btn btn-secondary" onclick="loadDashboard()">↻ Refresh</button>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card s1" data-icon="📚">
+          <div class="stat-label">Total Books</div>
+          <div class="stat-value" id="st-books">—</div>
+        </div>
+        <div class="stat-card s2" data-icon="◉">
+          <div class="stat-label">Members</div>
+          <div class="stat-value" id="st-members">—</div>
+        </div>
+        <div class="stat-card s3" data-icon="↗">
+          <div class="stat-label">Active Loans</div>
+          <div class="stat-value" id="st-loans">—</div>
+        </div>
+        <div class="stat-card s4" data-icon="⚠">
+          <div class="stat-label">Overdue</div>
+          <div class="stat-value" id="st-overdue">—</div>
+        </div>
+      </div>
+
+      <div class="dash-grid">
+        <div class="section">
+          <div class="section-header"><span class="section-title">Recently Added Books</span></div>
+          <div id="dash-books"></div>
+        </div>
+        <div class="section">
+          <div class="section-header"><span class="section-title">Recent Borrowings</span></div>
+          <div id="dash-loans"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">Books by Genre — Stock Overview</span>
+          <span class="badge badge-amber">GROUP BY</span>
+        </div>
+        <div id="dash-genres" style="padding:0"></div>
+      </div>
+    </div>
+
+    <!-- ══ BOOKS ════════════════════════════════ -->
+    <div class="page" id="page-books">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Books</div>
+          <div class="page-subtitle">Manage the library catalogue</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header"><span class="section-title">Add New Book</span></div>
+        <div class="form-grid">
+          <div class="form-group full">
+            <label>Title</label>
+            <input id="b_title" type="text" placeholder="Book title">
+          </div>
+          <div class="form-group">
+            <label>Author</label>
+            <select id="b_author_id"></select>
+          </div>
+          <div class="form-group">
+            <label>Genre</label>
+            <select id="b_genre_id"></select>
+          </div>
+          <div class="form-group">
+            <label>ISBN</label>
+            <input id="b_isbn" type="text" placeholder="978-0-00-000000-0">
+          </div>
+          <div class="form-group">
+            <label>Published Year</label>
+            <input id="b_year" type="number" placeholder="2024" min="1000" max="2030">
+          </div>
+          <div class="form-group">
+            <label>Total Copies</label>
+            <input id="b_copies" type="number" placeholder="3" min="1">
+          </div>
+          <div class="form-group">
+            <label>Shelf Location</label>
+            <input id="b_shelf" type="text" placeholder="e.g. A-12">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="addBook()">＋ Add Book</button>
+          <button class="btn btn-secondary" onclick="clearBookForm()">Clear</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">All Books (JOIN: Authors + Genres)</span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span class="badge badge-brown">SQL JOIN</span>
+            <button class="btn btn-secondary btn-sm" onclick="loadBooks()">↻</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>ID</th><th>Title</th><th>Author</th><th>Genre</th>
+              <th>ISBN</th><th>Year</th><th>Copies</th><th>Available</th><th>Shelf</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="books-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ AUTHORS ══════════════════════════════ -->
+    <div class="page" id="page-authors">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Authors</div>
+          <div class="page-subtitle">Manage author records</div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-header"><span class="section-title">Add Author</span></div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Full Name</label>
+            <input id="au_name" type="text" placeholder="Author's full name">
+          </div>
+          <div class="form-group">
+            <label>Nationality</label>
+            <input id="au_nat" type="text" placeholder="e.g. British">
+          </div>
+          <div class="form-group">
+            <label>Birth Year</label>
+            <input id="au_born" type="number" placeholder="1960">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="addAuthor()">＋ Add Author</button>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">Authors & Book Count (LEFT JOIN + COUNT)</span>
+          <span class="badge badge-brown">SQL JOIN</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>ID</th><th>Name</th><th>Nationality</th><th>Born</th><th>Books in Library</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="authors-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ GENRES ═══════════════════════════════ -->
+    <div class="page" id="page-genres">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Genres</div>
+          <div class="page-subtitle">Classify your collection</div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-header"><span class="section-title">Add Genre</span></div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Genre Name</label>
+            <input id="g_name" type="text" placeholder="e.g. Historical Fiction">
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <input id="g_desc" type="text" placeholder="Brief description">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="addGenre()">＋ Add Genre</button>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-header"><span class="section-title">All Genres</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>Genre</th><th>Description</th><th>Books</th><th>Actions</th></tr></thead>
+            <tbody id="genres-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ MEMBERS ══════════════════════════════ -->
+    <div class="page" id="page-members">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Members</div>
+          <div class="page-subtitle">Registered library card holders</div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-header"><span class="section-title">Register New Member</span></div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Full Name</label>
+            <input id="m_name" type="text" placeholder="Member's name">
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input id="m_email" type="email" placeholder="email@example.com">
+          </div>
+          <div class="form-group">
+            <label>Phone</label>
+            <input id="m_phone" type="text" placeholder="+91 00000 00000">
+          </div>
+          <div class="form-group">
+            <label>Membership Type</label>
+            <select id="m_type">
+              <option value="Standard">Standard</option>
+              <option value="Premium">Premium</option>
+              <option value="Student">Student</option>
+              <option value="Senior">Senior</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Join Date</label>
+            <input id="m_joined" type="date">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="addMember()">＋ Register Member</button>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">All Members (with Active Loans)</span>
+          <button class="btn btn-secondary btn-sm" onclick="loadMembers()">↻</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>ID</th><th>Name</th><th>Email</th><th>Phone</th>
+              <th>Type</th><th>Joined</th><th>Active Loans</th><th>Status</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="members-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ BORROW ════════════════════════════════ -->
+    <div class="page" id="page-borrow">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Borrow a Book</div>
+          <div class="page-subtitle">Issue a book to a member — decrements available copies in real time</div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">Issue Book</span>
+          <span class="badge badge-sage">Live Stock Update</span>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Member</label>
+            <select id="lo_member_id"></select>
+          </div>
+          <div class="form-group">
+            <label>Book</label>
+            <select id="lo_book_id"></select>
+          </div>
+          <div class="form-group">
+            <label>Borrow Date</label>
+            <input id="lo_borrow_date" type="date">
+          </div>
+          <div class="form-group">
+            <label>Due Date</label>
+            <input id="lo_due_date" type="date">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="issueBook()">↗ Issue Book</button>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">All Active Loans (JOIN: Members + Books)</span>
+          <span class="badge badge-brown">SQL JOIN</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>ID</th><th>Member</th><th>Book</th><th>Borrowed On</th>
+              <th>Due Date</th><th>Status</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="loans-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ RETURNS ═══════════════════════════════ -->
+    <div class="page" id="page-returns">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Returns</div>
+          <div class="page-subtitle">Process book returns and apply fines</div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">Process Return</span>
+          <span class="badge badge-sage">Live Stock Restore</span>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Select Active Loan</label>
+            <select id="ret_loan_id"></select>
+          </div>
+          <div class="form-group">
+            <label>Return Date</label>
+            <input id="ret_date" type="date">
+          </div>
+          <div class="form-group">
+            <label>Fine Amount (₹)</label>
+            <input id="ret_fine" type="number" placeholder="0" min="0" value="0">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-sage" onclick="processReturn()">↙ Process Return</button>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">Return History (JOIN: Members + Books + Loans)</span>
+          <span class="badge badge-brown">SQL JOIN</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>ID</th><th>Member</th><th>Book</th><th>Borrowed</th>
+              <th>Returned</th><th>Days Held</th><th>Fine</th>
+            </tr></thead>
+            <tbody id="returns-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ OVERDUE ═══════════════════════════════ -->
+    <div class="page" id="page-overdue">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Overdue Books</div>
+          <div class="page-subtitle">Books not returned past their due date</div>
+        </div>
+        <button class="btn btn-secondary" onclick="loadOverdue()">↻ Refresh</button>
+      </div>
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">Overdue Loans (JOIN + WHERE date comparison)</span>
+          <span class="badge badge-red">Needs Attention</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>ID</th><th>Member</th><th>Book</th><th>Borrowed</th>
+              <th>Due Date</th><th>Days Overdue</th><th>Est. Fine (₹2/day)</th>
+            </tr></thead>
+            <tbody id="overdue-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ SQL TERMINAL ══════════════════════════ -->
+    <div class="page" id="page-sql">
+      <div class="page-header">
+        <div>
+          <div class="page-title">SQL Terminal</div>
+          <div class="page-subtitle">Execute raw SQL — DDL · DML · DQL · JOIN · Aggregate</div>
+        </div>
+      </div>
+      <div class="sql-terminal">
+        <div class="term-header">
+          <div class="tdot r"></div><div class="tdot y"></div><div class="tdot g"></div>
+          <div class="term-title">arcana_library.db — SQLite Shell</div>
+        </div>
+        <div class="term-body">
+          <textarea class="sql-input" id="sqlInput" placeholder="-- Enter any SQL query
+-- Example: SELECT b.title, a.name, COUNT(l.loan_id) as times_borrowed
+-- FROM Books b JOIN Authors a ON b.author_id=a.author_id
+-- LEFT JOIN Loans l ON b.book_id=l.book_id
+-- GROUP BY b.book_id ORDER BY times_borrowed DESC;"></textarea>
+        </div>
+        <div class="term-actions">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-sage btn-sm" onclick="runSQL()">▶ Run</button>
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('sqlInput').value=''">Clear</button>
+            <button class="btn btn-danger btn-sm" onclick="resetDatabase()" style="margin-left:12px">⚠ Reset DB</button>
+            <button class="btn btn-secondary btn-sm" onclick="loadSample('popular')">Popular Books</button>
+            <button class="btn btn-secondary btn-sm" onclick="loadSample('member')">Member Stats</button>
+            <button class="btn btn-secondary btn-sm" onclick="loadSample('overdue')">Overdue Query</button>
+          </div>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(255,255,255,.3)">Ctrl+Enter</span>
+        </div>
+      </div>
+      <div class="sql-result">
+        <div class="sql-result-hdr">Output</div>
+        <div class="sql-output" id="sqlOutput">-- Results appear here</div>
+      </div>
+    </div>
+
+    <!-- ══ SCHEMA ════════════════════════════════ -->
+    <div class="page" id="page-schema">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Database Schema</div>
+          <div class="page-subtitle">Entity Relationship Overview — 6 Tables</div>
+        </div>
+      </div>
+      <div class="schema-box">
+Authors          (author_id PK, name, nationality, birth_year)
+    │
+    └──(1:N)──▶ Books        (book_id PK, title, author_id FK, genre_id FK,
+                               isbn UNIQUE, published_year, total_copies,
+                               available_copies, shelf_location)
+                    │
+                    └──(1:N)──▶ Loans   (loan_id PK, book_id FK, member_id FK,
+                                          borrow_date, due_date, return_date,
+                                          fine_amount, status)
+
+Genres           (genre_id PK, name UNIQUE, description)
+    │
+    └──(1:N)──▶ Books (via genre_id FK)
+
+Members          (member_id PK, full_name, email UNIQUE, phone,
+                  membership_type, join_date, status)
+    │
+    └──(1:N)──▶ Loans (via member_id FK)
+
+────────────────────────────────────────────────────────────────
+DDL:   CREATE TABLE with PK, FK, UNIQUE, NOT NULL, CHECK, DEFAULT
+DML:   INSERT, UPDATE (available_copies, return), DELETE
+DQL:   SELECT, WHERE, ORDER BY, GROUP BY, HAVING, date()
+JOIN:  Books↔Authors, Books↔Genres, Loans↔Books↔Members
+AGG:   COUNT, SUM, AVG — books per genre, loans per member, fines
+      </div>
+    </div>
+
+  </main>
+</div><!-- .app -->
+</div><!-- #app -->
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+let db, SQL;
+
+// ── INIT ─────────────────────────────────────────────────────────
+const DB_KEY = 'arcana_library_db_v1';
+
+function saveDB() {
+  try {
+    const data = db.export();
+    const b64  = btoa(String.fromCharCode(...data));
+    localStorage.setItem(DB_KEY, b64);
+  } catch(e) { console.warn('Save failed:', e); }
+}
+
+function loadSavedDB() {
+  try {
+    const b64 = localStorage.getItem(DB_KEY);
+    if (!b64) return false;
+    const binary = atob(b64);
+    const arr = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+    db = new SQL.Database(arr);
+    return true;
+  } catch(e) { return false; }
+}
+
+function resetDatabase() {
+  if (!confirm('Reset all data back to defaults? All your added records will be lost.')) return;
+  localStorage.removeItem(DB_KEY);
+  toast('Database reset — reloading…');
+  setTimeout(() => location.reload(), 800);
+}
+
+async function initDB() {
+  SQL = await initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}` });
+
+  const restored = loadSavedDB();
+  if (!restored) {
+    db = new SQL.Database();
+    createSchema();
+    seedData();
+    saveDB();
+  }
+
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('dbDot').classList.add('on');
+  document.getElementById('dbStatus').textContent = restored
+    ? 'arcana_library.db · Restored ✓'
+    : 'arcana_library.db · Live';
+  loadDashboard();
+  populateDropdowns();
+}
+
+function createSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS Authors (
+      author_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+      name       TEXT NOT NULL UNIQUE,
+      nationality TEXT,
+      birth_year INTEGER CHECK(birth_year > 1000 AND birth_year < 2010)
+    );
+
+    CREATE TABLE IF NOT EXISTS Genres (
+      genre_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+      name        TEXT NOT NULL UNIQUE,
+      description TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS Members (
+      member_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+      full_name       TEXT NOT NULL,
+      email           TEXT UNIQUE,
+      phone           TEXT,
+      membership_type TEXT DEFAULT 'Standard'
+                      CHECK(membership_type IN ('Standard','Premium','Student','Senior')),
+      join_date       DATE NOT NULL DEFAULT (date('now')),
+      status          TEXT DEFAULT 'Active'
+                      CHECK(status IN ('Active','Suspended','Expired'))
+    );
+
+    CREATE TABLE IF NOT EXISTS Books (
+      book_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      title            TEXT NOT NULL,
+      author_id        INTEGER REFERENCES Authors(author_id),
+      genre_id         INTEGER REFERENCES Genres(genre_id),
+      isbn             TEXT UNIQUE,
+      published_year   INTEGER,
+      total_copies     INTEGER DEFAULT 1 CHECK(total_copies >= 1),
+      available_copies INTEGER DEFAULT 1 CHECK(available_copies >= 0),
+      shelf_location   TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS Loans (
+      loan_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+      book_id     INTEGER NOT NULL REFERENCES Books(book_id),
+      member_id   INTEGER NOT NULL REFERENCES Members(member_id),
+      borrow_date DATE NOT NULL DEFAULT (date('now')),
+      due_date    DATE NOT NULL,
+      return_date DATE,
+      fine_amount REAL DEFAULT 0 CHECK(fine_amount >= 0),
+      status      TEXT DEFAULT 'Active'
+                  CHECK(status IN ('Active','Returned','Overdue'))
+    );
+  `);
+}
+
+function seedData() {
+  db.run(`
+    INSERT INTO Authors (name, nationality, birth_year) VALUES
+    ('Gabriel García Márquez','Colombian',1927),
+    ('Fyodor Dostoevsky','Russian',1821),
+    ('Toni Morrison','American',1931),
+    ('Haruki Murakami','Japanese',1949),
+    ('Chimamanda Ngozi Adichie','Nigerian',1977),
+    ('Leo Tolstoy','Russian',1828);
+
+    INSERT INTO Genres (name, description) VALUES
+    ('Magical Realism','Fiction blending realistic narrative with surreal elements'),
+    ('Literary Fiction','Character-driven, thought-provoking narrative fiction'),
+    ('Psychological Thriller','Suspense with deep focus on character psychology'),
+    ('Contemporary Fiction','Modern themes and settings in fictional narrative'),
+    ('Classic Literature','Enduring works of recognized literary merit');
+
+    INSERT INTO Members (full_name, email, phone, membership_type, join_date, status) VALUES
+    ('Aarav Mehta','aarav@mail.com','+91 98765 43210','Premium','2023-06-01','Active'),
+    ('Priya Sharma','priya@mail.com','+91 87654 32109','Student','2024-01-15','Active'),
+    ('Rohan Gupta','rohan@mail.com','+91 76543 21098','Standard','2023-09-10','Active'),
+    ('Ananya Patel','ananya@mail.com','+91 65432 10987','Senior','2022-11-20','Active'),
+    ('Karan Joshi','karan@mail.com','+91 54321 09876','Standard','2024-03-05','Active');
+
+    INSERT INTO Books (title, author_id, genre_id, isbn, published_year, total_copies, available_copies, shelf_location) VALUES
+    ('One Hundred Years of Solitude',1,1,'978-0-06-088328-7',1967,3,2,'A-01'),
+    ('Crime and Punishment',2,3,'978-0-14-044913-6',1866,2,2,'B-04'),
+    ('Beloved',3,2,'978-1-4000-3341-6',1987,2,1,'C-02'),
+    ('Norwegian Wood',4,4,'978-0-37-571471-5',1987,3,3,'D-05'),
+    ('Americanah',5,4,'978-0-30-727110-7',2013,2,2,'E-03'),
+    ('War and Peace',6,5,'978-0-19-923205-3',1869,2,2,'B-01'),
+    ('Love in the Time of Cholera',1,1,'978-0-14-243723-7',1985,2,2,'A-02'),
+    ('The Brothers Karamazov',2,3,'978-0-37-470918-8',1880,2,2,'B-05'),
+    ('Kafka on the Shore',4,1,'978-1-40-003654-6',2002,3,2,'D-06'),
+    ('Purple Hibiscus',5,2,'978-1-61-620304-2',2003,2,2,'E-04');
+
+    INSERT INTO Loans (book_id, member_id, borrow_date, due_date, return_date, fine_amount, status) VALUES
+    (1,1,'2025-03-01','2025-03-15','2025-03-14',0,'Returned'),
+    (3,2,'2025-03-10','2025-03-24',NULL,0,'Active'),
+    (9,3,'2025-02-20','2025-03-06',NULL,0,'Overdue'),
+    (4,4,'2025-03-15','2025-03-29','2025-03-28',0,'Returned'),
+    (7,5,'2025-03-20','2025-04-03',NULL,0,'Active'),
+    (2,1,'2025-04-01','2025-04-15',NULL,0,'Active'),
+    (5,3,'2025-01-15','2025-01-29',NULL,0,'Overdue');
+  `);
+}
+
+// ── HELPERS ──────────────────────────────────────────────────────
+function qry(sql, p=[]) {
+  try {
+    const s = db.prepare(sql); s.bind(p);
+    const rows = [];
+    while(s.step()) rows.push(s.getAsObject());
+    s.free(); return rows;
+  } catch(e) { return []; }
+}
+function run(sql, p=[]) {
+  try {
+    db.run(sql, p);
+    saveDB();
+    return true;
+  } catch(e) {
+    toast(e.message,'error');
+    return false;
+  }
+}
+function toast(msg, type='success') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `${type==='success'?'✓':'✕'} ${msg}`;
+  document.getElementById('toastContainer').appendChild(el);
+  setTimeout(()=>el.remove(), 3500);
+}
+function today() { return new Date().toISOString().split('T')[0]; }
+function daysApart(d1,d2) {
+  return Math.round((new Date(d2)-new Date(d1))/(1000*60*60*24));
+}
+
+function statusBadge(s) {
+  const m = { Active:'badge-sage', Returned:'badge-teal', Overdue:'badge-red',
+    Standard:'badge-gray', Premium:'badge-brown', Student:'badge-amber', Senior:'badge-teal',
+    Suspended:'badge-red', Expired:'badge-gray' };
+  return `<span class="badge ${m[s]||'badge-gray'}">${s}</span>`;
+}
+
+// ── DROPDOWNS ─────────────────────────────────────────────────────
+function populateDropdowns() {
+  const authors = qry('SELECT author_id, name FROM Authors ORDER BY name');
+  const genres  = qry('SELECT genre_id, name FROM Genres ORDER BY name');
+  const members = qry('SELECT member_id, full_name FROM Members WHERE status="Active" ORDER BY full_name');
+  const avBooks = qry('SELECT book_id, title FROM Books WHERE available_copies > 0 ORDER BY title');
+  const activeLoans = qry(`SELECT l.loan_id, m.full_name, b.title
+    FROM Loans l JOIN Members m ON l.member_id=m.member_id
+    JOIN Books b ON l.book_id=b.book_id
+    WHERE l.status="Active" ORDER BY l.loan_id`);
+
+  const fill = (id, rows, vk, lf) => {
+    const el = document.getElementById(id); if(!el) return;
+    el.innerHTML = rows.map(r=>`<option value="${r[vk]}">${lf(r)}</option>`).join('');
+  };
+  fill('b_author_id', authors, 'author_id', r=>r.name);
+  fill('b_genre_id',  genres,  'genre_id',  r=>r.name);
+  fill('lo_member_id',members,'member_id',  r=>r.full_name);
+  fill('lo_book_id',  avBooks,'book_id',    r=>r.title);
+  fill('ret_loan_id', activeLoans,'loan_id',r=>`#${r.loan_id} — ${r.full_name} → ${r.title}`);
+}
+
+// ── NAV ───────────────────────────────────────────────────────────
+function nav(page, el) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  el.classList.add('active');
+  const loaders = {
+    dashboard:loadDashboard, books:loadBooks, authors:loadAuthors,
+    genres:loadGenres, members:loadMembers, borrow:loadLoans,
+    returns:loadReturns, overdue:loadOverdue
+  };
+  if(loaders[page]) loaders[page]();
+  populateDropdowns();
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────
+function loadDashboard() {
+  document.getElementById('st-books').textContent   = qry('SELECT COUNT(*) c FROM Books')[0]?.c||0;
+  document.getElementById('st-members').textContent = qry('SELECT COUNT(*) c FROM Members WHERE status="Active"')[0]?.c||0;
+  document.getElementById('st-loans').textContent   = qry('SELECT COUNT(*) c FROM Loans WHERE status="Active"')[0]?.c||0;
+  document.getElementById('st-overdue').textContent = qry(`SELECT COUNT(*) c FROM Loans WHERE status IN ("Active","Overdue") AND due_date < date('now')`)[0]?.c||0;
+
+  // Recent books
+  const books = qry(`SELECT b.title, a.name, g.name gname FROM Books b
+    LEFT JOIN Authors a ON b.author_id=a.author_id
+    LEFT JOIN Genres g ON b.genre_id=g.genre_id
+    ORDER BY b.book_id DESC LIMIT 5`);
+  document.getElementById('dash-books').innerHTML = books.map(b=>
+    `<div class="activity-item">
+      <div class="a-icon brown">📖</div>
+      <div><div class="a-text"><strong>${b.title}</strong></div>
+      <div class="a-meta">${b.name||'Unknown'} · ${b.gname||'—'}</div></div>
+    </div>`).join('');
+
+  // Recent loans
+  const loans = qry(`SELECT m.full_name, b.title, l.borrow_date, l.status
+    FROM Loans l JOIN Members m ON l.member_id=m.member_id
+    JOIN Books b ON l.book_id=b.book_id
+    ORDER BY l.loan_id DESC LIMIT 5`);
+  document.getElementById('dash-loans').innerHTML = loans.map(l=>
+    `<div class="activity-item">
+      <div class="a-icon amber">↗</div>
+      <div><div class="a-text"><strong>${l.full_name}</strong> borrowed <em>${l.title}</em></div>
+      <div class="a-meta">${l.borrow_date} · ${statusBadge(l.status)}</div></div>
+    </div>`).join('');
+
+  // Genre stock
+  const gStats = qry(`SELECT g.name, COUNT(b.book_id) total, SUM(b.available_copies) avail
+    FROM Genres g LEFT JOIN Books b ON g.genre_id=b.genre_id
+    GROUP BY g.genre_id ORDER BY total DESC`);
+  const maxT = Math.max(...gStats.map(g=>g.total||1),1);
+  document.getElementById('dash-genres').innerHTML = gStats.map(g=>
+    `<div style="padding:13px 20px;border-top:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:14px">
+        <span>${g.name}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted)">${g.avail||0} available / ${g.total||0} total</span>
+      </div>
+      <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${Math.round((g.total||0)/maxT*100)}%;background:var(--amber);border-radius:3px;transition:width .6s"></div>
+      </div>
+    </div>`).join('');
+}
+
+// ── BOOKS ─────────────────────────────────────────────────────────
+function addBook() {
+  const v = {
+    title: document.getElementById('b_title').value.trim(),
+    aid:   document.getElementById('b_author_id').value,
+    gid:   document.getElementById('b_genre_id').value,
+    isbn:  document.getElementById('b_isbn').value.trim(),
+    year:  parseInt(document.getElementById('b_year').value)||null,
+    copies:parseInt(document.getElementById('b_copies').value)||1,
+    shelf: document.getElementById('b_shelf').value.trim()
+  };
+  if(!v.title) return toast('Title is required','error');
+  if(run('INSERT INTO Books (title,author_id,genre_id,isbn,published_year,total_copies,available_copies,shelf_location) VALUES (?,?,?,?,?,?,?,?)',
+    [v.title,v.aid||null,v.gid||null,v.isbn||null,v.year,v.copies,v.copies,v.shelf||null])) {
+    toast(`"${v.title}" added to catalogue`); loadBooks(); populateDropdowns(); clearBookForm();
+  }
+}
+function clearBookForm() {
+  ['b_title','b_isbn','b_year','b_copies','b_shelf'].forEach(id=>document.getElementById(id).value='');
+}
+function deleteBook(id) {
+  if(!confirm('Remove this book from the catalogue?')) return;
+  run('DELETE FROM Books WHERE book_id=?',[id]);
+  toast('Book removed'); loadBooks(); populateDropdowns();
+}
+function loadBooks() {
+  const rows = qry(`SELECT b.*, a.name aname, g.name gname
+    FROM Books b
+    LEFT JOIN Authors a ON b.author_id=a.author_id
+    LEFT JOIN Genres  g ON b.genre_id =g.genre_id
+    ORDER BY b.title`);
+  document.getElementById('books-table').innerHTML = rows.length ? rows.map(r=>
+    `<tr>
+      <td>#${r.book_id}</td>
+      <td><strong>${r.title}</strong></td>
+      <td>${r.aname||'—'}</td>
+      <td><span class="badge badge-amber">${r.gname||'—'}</span></td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px">${r.isbn||'—'}</td>
+      <td>${r.published_year||'—'}</td>
+      <td>${r.total_copies}</td>
+      <td>${r.available_copies>0?`<span class="badge badge-sage">${r.available_copies}</span>`:'<span class="badge badge-red">0</span>'}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px">${r.shelf_location||'—'}</td>
+      <td><button class="btn btn-red btn-sm" onclick="deleteBook(${r.book_id})">Remove</button></td>
+    </tr>`).join('')
+  : `<tr><td colspan="10"><div class="empty"><div class="empty-icon">📚</div>No books in catalogue</div></td></tr>`;
+}
+
+// ── AUTHORS ───────────────────────────────────────────────────────
+function addAuthor() {
+  const name = document.getElementById('au_name').value.trim();
+  const nat  = document.getElementById('au_nat').value.trim();
+  const born = parseInt(document.getElementById('au_born').value)||null;
+  if(!name) return toast('Name required','error');
+  if(run('INSERT INTO Authors (name,nationality,birth_year) VALUES (?,?,?)',[name,nat||null,born])) {
+    toast(`Author ${name} added`); loadAuthors(); populateDropdowns();
+  }
+}
+function deleteAuthor(id) {
+  if(!confirm('Delete author? Books by this author will lose their author link.')) return;
+  run('DELETE FROM Authors WHERE author_id=?',[id]);
+  toast('Author deleted'); loadAuthors(); populateDropdowns();
+}
+function loadAuthors() {
+  const rows = qry(`SELECT a.*, COUNT(b.book_id) book_count
+    FROM Authors a LEFT JOIN Books b ON a.author_id=b.author_id
+    GROUP BY a.author_id ORDER BY a.name`);
+  document.getElementById('authors-table').innerHTML = rows.length ? rows.map(r=>
+    `<tr>
+      <td>#${r.author_id}</td>
+      <td><strong>${r.name}</strong></td>
+      <td>${r.nationality||'—'}</td>
+      <td>${r.birth_year||'—'}</td>
+      <td><span class="badge badge-brown">${r.book_count} book${r.book_count!==1?'s':''}</span></td>
+      <td><button class="btn btn-red btn-sm" onclick="deleteAuthor(${r.author_id})">Delete</button></td>
+    </tr>`).join('')
+  : `<tr><td colspan="6"><div class="empty"><div class="empty-icon">✒</div>No authors yet</div></td></tr>`;
+}
+
+// ── GENRES ────────────────────────────────────────────────────────
+function addGenre() {
+  const name = document.getElementById('g_name').value.trim();
+  const desc = document.getElementById('g_desc').value.trim();
+  if(!name) return toast('Genre name required','error');
+  if(run('INSERT INTO Genres (name,description) VALUES (?,?)',[name,desc||null])) {
+    toast(`Genre "${name}" added`); loadGenres(); populateDropdowns();
+  }
+}
+function deleteGenre(id) {
+  if(!confirm('Delete this genre?')) return;
+  run('DELETE FROM Genres WHERE genre_id=?',[id]);
+  toast('Genre deleted'); loadGenres(); populateDropdowns();
+}
+function loadGenres() {
+  const rows = qry(`SELECT g.*, COUNT(b.book_id) bc FROM Genres g
+    LEFT JOIN Books b ON g.genre_id=b.genre_id
+    GROUP BY g.genre_id ORDER BY g.name`);
+  document.getElementById('genres-table').innerHTML = rows.length ? rows.map(r=>
+    `<tr>
+      <td>#${r.genre_id}</td>
+      <td><strong>${r.name}</strong></td>
+      <td style="color:var(--muted);font-style:italic">${r.description||'—'}</td>
+      <td><span class="badge badge-amber">${r.bc}</span></td>
+      <td><button class="btn btn-red btn-sm" onclick="deleteGenre(${r.genre_id})">Delete</button></td>
+    </tr>`).join('')
+  : `<tr><td colspan="5"><div class="empty"><div class="empty-icon">◎</div>No genres yet</div></td></tr>`;
+}
+
+// ── MEMBERS ───────────────────────────────────────────────────────
+function addMember() {
+  const v = {
+    name:  document.getElementById('m_name').value.trim(),
+    email: document.getElementById('m_email').value.trim(),
+    phone: document.getElementById('m_phone').value.trim(),
+    type:  document.getElementById('m_type').value,
+    joined:document.getElementById('m_joined').value
+  };
+  if(!v.name||!v.joined) return toast('Name and join date required','error');
+  if(run('INSERT INTO Members (full_name,email,phone,membership_type,join_date) VALUES (?,?,?,?,?)',
+    [v.name,v.email||null,v.phone||null,v.type,v.joined])) {
+    toast(`${v.name} registered as member`); loadMembers(); populateDropdowns();
+  }
+}
+function suspendMember(id) {
+  run('UPDATE Members SET status="Suspended" WHERE member_id=?',[id]);
+  toast('Member suspended'); loadMembers();
+}
+function deleteMember(id) {
+  if(!confirm('Delete this member?')) return;
+  run('DELETE FROM Members WHERE member_id=?',[id]);
+  toast('Member deleted'); loadMembers(); populateDropdowns();
+}
+function loadMembers() {
+  const rows = qry(`SELECT m.*, COUNT(CASE WHEN l.status='Active' THEN 1 END) active_loans
+    FROM Members m LEFT JOIN Loans l ON m.member_id=l.member_id
+    GROUP BY m.member_id ORDER BY m.full_name`);
+  document.getElementById('members-table').innerHTML = rows.length ? rows.map(r=>
+    `<tr>
+      <td>#${r.member_id}</td>
+      <td><strong>${r.full_name}</strong></td>
+      <td style="font-size:13px">${r.email||'—'}</td>
+      <td style="font-size:13px">${r.phone||'—'}</td>
+      <td>${statusBadge(r.membership_type)}</td>
+      <td>${r.join_date}</td>
+      <td><span class="badge ${r.active_loans>0?'badge-amber':'badge-gray'}">${r.active_loans}</span></td>
+      <td>${statusBadge(r.status)}</td>
+      <td><div class="action-group">
+        <button class="btn btn-secondary btn-sm" onclick="suspendMember(${r.member_id})">Suspend</button>
+        <button class="btn btn-red btn-sm" onclick="deleteMember(${r.member_id})">Delete</button>
+      </div></td>
+    </tr>`).join('')
+  : `<tr><td colspan="9"><div class="empty"><div class="empty-icon">◉</div>No members registered</div></td></tr>`;
+}
+
+// ── LOANS (BORROW) ────────────────────────────────────────────────
+function issueBook() {
+  const mid = document.getElementById('lo_member_id').value;
+  const bid = document.getElementById('lo_book_id').value;
+  const bd  = document.getElementById('lo_borrow_date').value;
+  const dd  = document.getElementById('lo_due_date').value;
+  if(!mid||!bid||!bd||!dd) return toast('All fields required','error');
+  if(dd <= bd) return toast('Due date must be after borrow date','error');
+
+  // Check availability
+  const avail = qry('SELECT available_copies FROM Books WHERE book_id=?',[bid])[0]?.available_copies||0;
+  if(avail < 1) return toast('No copies available for this book','error');
+
+  const ok = run('INSERT INTO Loans (book_id,member_id,borrow_date,due_date) VALUES (?,?,?,?)',[bid,mid,bd,dd]);
+  if(ok) {
+    run('UPDATE Books SET available_copies = available_copies - 1 WHERE book_id=?',[bid]);
+    toast('Book issued successfully'); loadLoans(); populateDropdowns(); loadDashboard();
+  }
+}
+function loadLoans() {
+  const rows = qry(`SELECT l.loan_id, m.full_name, b.title, l.borrow_date, l.due_date, l.status
+    FROM Loans l
+    JOIN Members m ON l.member_id=m.member_id
+    JOIN Books   b ON l.book_id  =b.book_id
+    WHERE l.status='Active'
+    ORDER BY l.due_date ASC`);
+  document.getElementById('loans-table').innerHTML = rows.length ? rows.map(r=>{
+    const overdue = r.due_date < today() && r.status === 'Active';
+    return `<tr class="${overdue?'overdue-row':''}">
+      <td>#${r.loan_id}</td>
+      <td><strong>${r.full_name}</strong></td>
+      <td><em>${r.title}</em></td>
+      <td>${r.borrow_date}</td>
+      <td style="color:${overdue?'var(--red)':'inherit'};font-weight:${overdue?600:400}">${r.due_date}</td>
+      <td>${overdue?'<span class="badge badge-red">Overdue</span>':statusBadge(r.status)}</td>
+      <td><button class="btn btn-sage btn-sm" onclick="quickReturn(${r.loan_id},${r.book_id||0})">↙ Return</button></td>
+    </tr>`;
+  }).join('')
+  : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">↗</div>No active loans</div></td></tr>`;
+}
+
+function quickReturn(loanId) {
+  if(!confirm('Mark this loan as returned?')) return;
+  const loan = qry('SELECT book_id FROM Loans WHERE loan_id=?',[loanId])[0];
+  if(!loan) return;
+  run('UPDATE Loans SET return_date=?, status="Returned" WHERE loan_id=?',[today(),loanId]);
+  run('UPDATE Books SET available_copies = available_copies + 1 WHERE book_id=?',[loan.book_id]);
+  toast('Book returned'); loadLoans(); populateDropdowns(); loadDashboard();
+}
+
+// ── RETURNS ───────────────────────────────────────────────────────
+function processReturn() {
+  const lid  = document.getElementById('ret_loan_id').value;
+  const rd   = document.getElementById('ret_date').value;
+  const fine = parseFloat(document.getElementById('ret_fine').value)||0;
+  if(!lid||!rd) return toast('Select a loan and return date','error');
+
+  const loan = qry('SELECT * FROM Loans WHERE loan_id=?',[lid])[0];
+  if(!loan) return toast('Loan not found','error');
+
+  run('UPDATE Loans SET return_date=?, fine_amount=?, status="Returned" WHERE loan_id=?',[rd,fine,lid]);
+  run('UPDATE Books SET available_copies = available_copies + 1 WHERE book_id=?',[loan.book_id]);
+  toast(`Return processed. Fine: ₹${fine}`);
+  loadReturns(); populateDropdowns(); loadDashboard();
+}
+function loadReturns() {
+  const rows = qry(`SELECT l.loan_id, m.full_name, b.title,
+      l.borrow_date, l.return_date, l.fine_amount,
+      (julianday(l.return_date) - julianday(l.borrow_date)) as days_held
+    FROM Loans l
+    JOIN Members m ON l.member_id=m.member_id
+    JOIN Books   b ON l.book_id  =b.book_id
+    WHERE l.status='Returned'
+    ORDER BY l.return_date DESC`);
+  document.getElementById('returns-table').innerHTML = rows.length ? rows.map(r=>
+    `<tr>
+      <td>#${r.loan_id}</td>
+      <td>${r.full_name}</td>
+      <td><em>${r.title}</em></td>
+      <td>${r.borrow_date}</td>
+      <td>${r.return_date}</td>
+      <td>${r.days_held ? Math.round(r.days_held)+' days' : '—'}</td>
+      <td style="color:${r.fine_amount>0?'var(--red)':'var(--sage)'};font-weight:600">
+        ${r.fine_amount>0?'₹'+r.fine_amount:'None'}
+      </td>
+    </tr>`).join('')
+  : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">↙</div>No returns recorded yet</div></td></tr>`;
+}
+
+// ── OVERDUE ───────────────────────────────────────────────────────
+function loadOverdue() {
+  const rows = qry(`SELECT l.loan_id, m.full_name, b.title,
+      l.borrow_date, l.due_date,
+      (julianday(date('now')) - julianday(l.due_date)) as days_overdue
+    FROM Loans l
+    JOIN Members m ON l.member_id=m.member_id
+    JOIN Books   b ON l.book_id  =b.book_id
+    WHERE l.status IN ('Active','Overdue') AND l.due_date < date('now')
+    ORDER BY days_overdue DESC`);
+  document.getElementById('overdue-table').innerHTML = rows.length ? rows.map(r=>{
+    const d = Math.round(r.days_overdue)||1;
+    return `<tr class="overdue-row">
+      <td>#${r.loan_id}</td>
+      <td><strong>${r.full_name}</strong></td>
+      <td><em>${r.title}</em></td>
+      <td>${r.borrow_date}</td>
+      <td style="color:var(--red);font-weight:600">${r.due_date}</td>
+      <td><span class="badge badge-red">${d} day${d!==1?'s':''}</span></td>
+      <td style="color:var(--red);font-weight:600">₹${d*2}</td>
+    </tr>`;
+  }).join('')
+  : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">✓</div>No overdue books — all clear!</div></td></tr>`;
+}
+
+// ── SQL TERMINAL ──────────────────────────────────────────────────
+const samples = {
+  popular: `-- Most borrowed books (JOIN + GROUP BY + ORDER BY)
+SELECT b.title, a.name AS Author,
+       COUNT(l.loan_id)  AS Times_Borrowed,
+       b.available_copies AS Available
+FROM Books b
+LEFT JOIN Authors a ON b.author_id = a.author_id
+LEFT JOIN Loans l  ON b.book_id   = l.book_id
+GROUP BY b.book_id
+ORDER BY Times_Borrowed DESC;`,
+
+  member: `-- Member borrowing summary (LEFT JOIN + Aggregate)
+SELECT m.full_name AS Member,
+       m.membership_type,
+       COUNT(l.loan_id)                          AS Total_Loans,
+       COUNT(CASE WHEN l.status='Active' THEN 1 END) AS Active,
+       COUNT(CASE WHEN l.status='Returned' THEN 1 END) AS Returned,
+       COALESCE(SUM(l.fine_amount), 0)           AS Total_Fines
+FROM Members m
+LEFT JOIN Loans l ON m.member_id = l.member_id
+GROUP BY m.member_id
+ORDER BY Total_Loans DESC;`,
+
+  overdue: `-- Overdue books with estimated fine (Subquery + date functions)
+SELECT m.full_name, b.title,
+       l.due_date,
+       CAST(julianday(date('now')) - julianday(l.due_date) AS INT) AS Days_Overdue,
+       CAST(julianday(date('now')) - julianday(l.due_date) AS INT) * 2 AS Fine_Rs
+FROM Loans l
+JOIN Members m ON l.member_id = m.member_id
+JOIN Books   b ON l.book_id   = b.book_id
+WHERE l.status IN ('Active','Overdue')
+  AND l.due_date < date('now')
+ORDER BY Days_Overdue DESC;`
+};
+
+function loadSample(k) { document.getElementById('sqlInput').value = samples[k]; }
+
+function runSQL() {
+  const sql = document.getElementById('sqlInput').value.trim();
+  const out = document.getElementById('sqlOutput');
+  if(!sql) return;
+  try {
+    const res = db.exec(sql);
+    if(!res.length) {
+      out.className='sql-output sql-success';
+      out.textContent='✓ Query executed successfully. No rows returned.';
+    } else {
+      const {columns,values} = res[0];
+      const cw = columns.map((c,i)=>Math.max(c.length,...values.map(r=>String(r[i]??'NULL').length)));
+      const div = cw.map(w=>'─'.repeat(w+2)).join('┼');
+      const hdr = columns.map((c,i)=>c.padEnd(cw[i])).join(' │ ');
+      const rowLines = values.map(r=>r.map((v,i)=>String(v??'NULL').padEnd(cw[i])).join(' │ '));
+      out.className='sql-output sql-success';
+      out.textContent=`${hdr}\n${div}\n${rowLines.join('\n')}\n\n(${values.length} row${values.length!==1?'s':''} returned)`;
+    }
+  } catch(e) {
+    out.className='sql-output sql-error';
+    out.textContent=`✕ Error: ${e.message}`;
+  }
+}
+
+document.addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key==='Enter')
+    if(document.getElementById('page-sql').classList.contains('active')) runSQL();
+});
+
+// ── SET DEFAULT DATES ─────────────────────────────────────────────
+function setDates() {
+  const t = today();
+  const due = new Date(); due.setDate(due.getDate()+14);
+  const dueStr = due.toISOString().split('T')[0];
+  ['m_joined','lo_borrow_date','ret_date'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value=t;
+  });
+  const dd=document.getElementById('lo_due_date'); if(dd) dd.value=dueStr;
+}
+
+// ── START ─────────────────────────────────────────────────────────
+initDB().then(()=>{ setDates(); })
+  .catch(e=>{
+    document.getElementById('loading').innerHTML=
+      `<div style="color:#f0d9b5;font-family:'JetBrains Mono',monospace;font-size:13px;text-align:center">
+        Failed to initialise database:<br>${e.message}</div>`;
+  });
+</script>
+</body>
+</html>
