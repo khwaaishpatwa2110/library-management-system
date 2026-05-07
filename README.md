@@ -322,10 +322,6 @@ This project was built as part of a **2nd Semester DBMS Practical** submission, 
 
 ---
 
-## 📄 License
-
-This project is open source and available under the [MIT License](LICENSE).
-
 ---
 
 <div align="center">
